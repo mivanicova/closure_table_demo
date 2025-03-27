@@ -1,14 +1,33 @@
 import pandas as pd
 import streamlit as st
 from streamlit_agraph import agraph, Node, Edge, Config
+import io
+
+# Načítanie CSV ak bol uploadnutý súbor
+uploaded_file = st.sidebar.file_uploader("Nahraj uloženú closure_table (CSV)", type="csv")
+if uploaded_file is not None:
+    st.session_state.closure_table = pd.read_csv(uploaded_file)
 
 # Inicializácia closure_table v session_state
 if 'closure_table' not in st.session_state:
     st.session_state.closure_table = pd.DataFrame([
-        {'ancestor': 'Osoba', 'descendant': 'Osoba', 'depth': 0, 'is_descendant_koko': False},
-        {'ancestor': 'Osoba', 'descendant': 'Majetok', 'depth': 1, 'is_descendant_koko': False},
-        {'ancestor': 'Majetok', 'descendant': 'Majetok', 'depth': 0, 'is_descendant_koko': False},
+        {'ancestor': 'Zem', 'descendant': 'Zem', 'depth': 0, 'is_descendant_koko': True},
+        {'ancestor': 'Zem', 'descendant': 'Živé', 'depth': 1, 'is_descendant_koko': False},
+        {'ancestor': 'Živé', 'descendant': 'Živé', 'depth': 0, 'is_descendant_koko': False},
     ])
+
+# Funkcia na stiahnutie CSV
+@st.cache_data
+def convert_df_to_csv(df):
+    return df.to_csv(index=False).encode('utf-8')
+
+csv = convert_df_to_csv(st.session_state.closure_table)
+st.sidebar.download_button(
+    label="Stiahnuť closure_table ako CSV",
+    data=csv,
+    file_name='closure_table.csv',
+    mime='text/csv'
+)
 
 # Implementácia add_node pre Closure Table
 def add_node(closure_table, parent, new_node, is_descendant_koko=False):
