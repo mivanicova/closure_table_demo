@@ -1,3 +1,4 @@
 pandas
 streamlit
 streamlit-agraph
+streamlit-tree-select

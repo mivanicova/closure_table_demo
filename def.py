@@ -69,39 +69,30 @@ def delete_node(closure_table, node_to_delete):
     descendants = closure_table[closure_table['ancestor'] == node_to_delete]['descendant'].tolist()
     return closure_table[~closure_table['descendant'].isin(descendants) & ~closure_table['ancestor'].isin(descendants)]
 
-import pandas as pd
-import streamlit as st
-
 def move_node(closure_table, node_to_move, new_parent):
-    # Kontrola, zda je uzel kořenový
     is_root = closure_table[(closure_table['ancestor'] == node_to_move) & (closure_table['depth'] == 0)].shape[0] == 1
-    
-    # Kontrola, zda nemá předka
     has_no_ancestors = closure_table[(closure_table['descendant'] == node_to_move) & (closure_table['depth'] > 0)].empty
-    
-    # Pokud je uzel kořenový a nemá předky, nelze přesunout
     if is_root and has_no_ancestors:
         st.error(f"Uzol '{node_to_move}' je root uzol a nemôže byť presunutý.")
         return closure_table
-    
-    # Krok 1: Extrakce podstromu před odstraněním
+
+    descendants_of_node = closure_table[closure_table['ancestor'] == node_to_move]['descendant'].tolist()
+    if new_parent in descendants_of_node:
+        st.error(f"Uzol '{node_to_move}' nemôže byť presunutý pod svojho potomka '{new_parent}'!")
+        return closure_table
+
     subtree = closure_table[closure_table['ancestor'] == node_to_move].copy()
     subtree_descendants = subtree['descendant'].unique().tolist()
-    
-    # Krok 2: Získání všech předků přesouvaného uzlu
     ancestors = closure_table[closure_table['descendant'] == node_to_move]['ancestor'].unique().tolist()
-    
-    # Krok 3: Odstranění všech cest z předků do podstromu
+
     closure_table = closure_table[~(
         closure_table['ancestor'].isin(ancestors) &
         closure_table['descendant'].isin(subtree_descendants) &
-        (closure_table['ancestor'] != closure_table['descendant'])  # zachovat identní řádky
+        (closure_table['ancestor'] != closure_table['descendant'])
     )]
-    
-    # Krok 4: Získání všech předků nového rodiče
+
     new_ancestors = closure_table[closure_table['descendant'] == new_parent].copy()
-    
-    # Krok 5: Generování nových cest (předek nového rodiče → každý uzel v podstromu)
+
     new_paths = []
     for _, ancestor_row in new_ancestors.iterrows():
         for _, sub_row in subtree.iterrows():
@@ -112,11 +103,8 @@ def move_node(closure_table, node_to_move, new_parent):
                 'is_descendant_koko': sub_row.get('is_descendant_koko', False),
                 'is_user_defined': sub_row.get('is_user_defined', False)
             })
-    
-    # Krok 6: Přidání interních cest podstromu zpět
+
     new_paths += subtree.to_dict('records')
-    
-    # Krok 7: Sloučení a vrácení
     closure_table = pd.concat([closure_table, pd.DataFrame(new_paths)], ignore_index=True)
     return closure_table.drop_duplicates()
 
@@ -160,7 +148,6 @@ if page == "Administrátor":
             st.session_state.admin_closure_table = move_node(st.session_state.admin_closure_table, node_to_move, new_parent)
             st.rerun()
 
-    # === VIZUALIZÁCIA LEN PRE ADMINA ===
     admin_table = st.session_state.admin_closure_table.copy()
     unique_nodes = admin_table[['descendant', 'is_descendant_koko']].drop_duplicates()
     nodes = [Node(id=row['descendant'], label=row['descendant'], color="red" if row['is_descendant_koko'] else "#97C2FC") for _, row in unique_nodes.iterrows()]
@@ -172,24 +159,15 @@ if page == "Administrátor":
 
 elif page == "Používateľ":
     def compute_completion_score(df):
-        # Vyber iba nody, ktoré sú is_descendant_koko=True
         koko_nodes = df[df['is_descendant_koko'] == True]['descendant'].unique()
-
-        # Nájdeme všetky nody, ktoré sú predkami iného koko-node
         koko_parents = df[(df['is_descendant_koko'] == True) & (df['depth'] == 1) & (df['ancestor'].isin(koko_nodes))]['ancestor'].unique()
-
-        # Koncové koko nody sú tie, ktoré nie sú predkami iného koko-node
         end_nodes = [n for n in koko_nodes if n not in koko_parents]
-
         total = len(end_nodes)
         completed = 0
-
         for node in end_nodes:
-            # Zisti, či tento koncový koko-node má aspoň jedného potomka (aj nekoko)
             has_descendant = not df[(df['ancestor'] == node) & (df['depth'] == 1)].empty
             if has_descendant:
                 completed += 1
-
         return total, completed
 
     st.sidebar.header("Moje uzly")
@@ -201,7 +179,6 @@ elif page == "Používateľ":
     if valid_parents:
         selected_parent = st.sidebar.selectbox("Vyber rodiča:", valid_parents)
         new_node_name = st.sidebar.text_input("Názov môjho uzla:")
-
         if st.sidebar.button("Pridať môj uzol"):
             if new_node_name.strip():
                 merged_table = pd.concat([st.session_state.admin_closure_table, st.session_state.user_closure_table])
@@ -219,7 +196,6 @@ elif page == "Používateľ":
     else:
         st.sidebar.info("Nie sú dostupní žiadni platní rodičia.")
 
-    # === MOŽNOSŤ MAZAŤ UŽÍVATEĽSKÉ UZLY ===
     deletable_nodes = st.session_state.user_closure_table[st.session_state.user_closure_table['is_user_defined'] == True]['descendant'].unique()
     if len(deletable_nodes) > 0:
         st.sidebar.markdown("---")
@@ -230,10 +206,75 @@ elif page == "Používateľ":
             st.sidebar.success(f"Uzol '{node_to_delete}' bol zmazaný.")
             st.rerun()
 
-
-
-    # === VIZUALIZÁCIA PRE POUŽÍVATEĽA ===
     combined_table = pd.concat([st.session_state.admin_closure_table, st.session_state.user_closure_table]).drop_duplicates()
+
+    # Postavíme strom len z väzieb depth == 1
+    def build_tree(df):
+        tree = {}
+        children_set = set()
+
+        for _, row in df[df['depth'] == 1].iterrows():
+            parent, child = row['ancestor'], row['descendant']
+            tree.setdefault(parent, []).append(child)
+            children_set.add(child)
+
+        return tree, children_set
+
+    def render_tree_sorted(tree, node, level=0, visited=None):
+        if visited is None:
+            visited = set()
+
+        if node in visited:
+            return
+        visited.add(node)
+
+        children = sorted(tree.get(node, []))
+        indent = " " * level
+        icon = "📁" if children else "📄"
+        st.markdown(f"{indent}{icon} {node}")
+
+        for child in children:
+            render_tree_sorted(tree, child, level + 1, visited)
+    
+    full_tree, children_set = build_tree(combined_table)
+
+    from streamlit_tree_select import tree_select
+
+    def build_tree_data(df):
+        """Rekurzívne premení closure table na formát pre streamlit_tree_select"""
+        tree = {}
+        for _, row in df[df['depth'] == 1].iterrows():
+            parent, child = row['ancestor'], row['descendant']
+            tree.setdefault(parent, set()).add(child)
+
+        def build_subtree(node):
+            children = tree.get(node, [])
+            return {
+                "label": node,
+                "value": node,
+                "children": [build_subtree(child) for child in sorted(children)]
+            }
+
+        # Zisti rooty: tie, ktoré nie sú potomkom žiadneho iného uzla
+        all_nodes = set(df['descendant'].unique())
+        child_nodes = set(df[df['depth'] == 1]['descendant'].unique())
+        roots = list(all_nodes - child_nodes)
+
+        return [build_subtree(root) for root in sorted(roots)]
+
+
+    # Root uzly = tie, ktoré nie sú nikde potomkom
+    all_nodes = set(combined_table['descendant'].unique())
+    root_candidates = [n for n in all_nodes if n not in children_set]
+
+    tree_data = build_tree_data(combined_table)
+    st.subheader("🌳 Interaktívna stromová štruktúra")
+    selected = tree_select(tree_data)
+
+    if selected:
+        st.success(f"Vybraný uzol: {selected}")
+
+
     unique_nodes = combined_table[['descendant', 'is_descendant_koko']].drop_duplicates()
     nodes = [Node(id=row['descendant'], label=row['descendant'], color="red" if row['is_descendant_koko'] else "#97C2FC") for _, row in unique_nodes.iterrows()]
     direct_edges = combined_table[combined_table['depth'] == 1]
@@ -242,10 +283,9 @@ elif page == "Používateľ":
     st.header("Vizualizácia dátovej mapy (používateľ)")
     agraph(nodes=nodes, edges=edges, config=config)
 
-    # === SKÓRE VYPLNENOSTI STROMU ===
     total, completed = compute_completion_score(combined_table)
     st.markdown(f"### Skóre vyplnenosti stromu: {completed} / {total} koncových KoKo uzlov má potomkov")
-    
+
 show_table = st.checkbox("Zobraziť closure_table", value=st.session_state.get('show_table', False))
 st.session_state.show_table = show_table
 
