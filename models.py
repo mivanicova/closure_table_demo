@@ -113,42 +113,87 @@ class ClosureTable:
         Raises:
             ValueError: If the move operation is invalid
         """
+        # Check if node is a root node that can't be moved
         is_root = self.df[(self.df['ancestor'] == node_to_move) & (self.df['depth'] == 0)].shape[0] == 1
         has_no_ancestors = self.df[(self.df['descendant'] == node_to_move) & (self.df['depth'] > 0)].empty
         
         if is_root and has_no_ancestors:
             raise ValueError(f"Uzol '{node_to_move}' je root uzol a nemôže byť presunutý.")
 
-        descendants_of_node = self.df[self.df['ancestor'] == node_to_move]['descendant'].tolist()
+        # Check if trying to move a node under its own descendant
+        descendants_of_node = self.df[self.df['ancestor'] == node_to_move]['descendant'].unique().tolist()
         if new_parent in descendants_of_node:
             raise ValueError(f"Uzol '{node_to_move}' nemôže byť presunutý pod svojho potomka '{new_parent}'!")
 
-        subtree = self.df[self.df['ancestor'] == node_to_move].copy()
-        subtree_descendants = subtree['descendant'].unique().tolist()
-        ancestors = self.df[self.df['descendant'] == node_to_move]['ancestor'].unique().tolist()
+        # Get all descendants of the node being moved (including the node itself)
+        subtree_nodes = descendants_of_node
 
+        # Get all paths that involve the node being moved and its descendants
+        # These are the paths we need to remove and recreate
+        paths_to_remove = self.df[
+            (self.df['descendant'].isin(subtree_nodes)) & 
+            (~self.df['ancestor'].isin(subtree_nodes) | (self.df['ancestor'] == node_to_move))
+        ].copy()
+        
+        # Keep track of the internal structure of the subtree (relationships between nodes in the subtree)
+        internal_subtree = self.df[
+            (self.df['ancestor'].isin(subtree_nodes)) & 
+            (self.df['descendant'].isin(subtree_nodes)) &
+            (self.df['ancestor'] != node_to_move)
+        ].copy()
+        
+        # Remove the paths that need to be recreated
         self.df = self.df[~(
-            self.df['ancestor'].isin(ancestors) &
-            self.df['descendant'].isin(subtree_descendants) &
-            (self.df['ancestor'] != self.df['descendant'])
+            (self.df['descendant'].isin(subtree_nodes)) & 
+            (~self.df['ancestor'].isin(subtree_nodes) | (self.df['ancestor'] == node_to_move))
         )]
-
-        new_ancestors = self.df[self.df['descendant'] == new_parent].copy()
-
+        
+        # Get all ancestors of the new parent (including the new parent itself)
+        new_parent_ancestors = self.df[self.df['descendant'] == new_parent].copy()
+        
+        # Create new paths from each ancestor of new_parent to each node in the subtree
         new_paths = []
-        for _, ancestor_row in new_ancestors.iterrows():
-            for _, sub_row in subtree.iterrows():
-                new_paths.append({
-                    'ancestor': ancestor_row['ancestor'],
-                    'descendant': sub_row['descendant'],
-                    'depth': ancestor_row['depth'] + 1 + sub_row['depth'],
-                    'is_descendant_koko': sub_row.get('is_descendant_koko', False),
-                    'is_user_defined': sub_row.get('is_user_defined', False),
-                    'node_type': sub_row.get('node_type', None)
-                })
-
-        new_paths += subtree.to_dict('records')
-        self.df = pd.concat([self.df, pd.DataFrame(new_paths)], ignore_index=True)
+        
+        # For each ancestor of the new parent
+        for _, ancestor_row in new_parent_ancestors.iterrows():
+            # For each node in the subtree
+            for subtree_node in subtree_nodes:
+                # Find the depth of this node relative to the node_to_move
+                relative_depth = 0
+                if subtree_node != node_to_move:
+                    # Get the path from node_to_move to this subtree node
+                    path = paths_to_remove[
+                        (paths_to_remove['ancestor'] == node_to_move) & 
+                        (paths_to_remove['descendant'] == subtree_node)
+                    ]
+                    if not path.empty:
+                        relative_depth = path.iloc[0]['depth']
+                
+                # Create a new path from the ancestor to this subtree node
+                # Get the node properties from the original paths
+                node_props = paths_to_remove[paths_to_remove['descendant'] == subtree_node]
+                
+                if not node_props.empty:
+                    props = node_props.iloc[0]
+                    new_paths.append({
+                        'ancestor': ancestor_row['ancestor'],
+                        'descendant': subtree_node,
+                        'depth': ancestor_row['depth'] + relative_depth,
+                        'is_descendant_koko': props.get('is_descendant_koko', False),
+                        'is_user_defined': props.get('is_user_defined', False),
+                        'node_type': props.get('node_type', None),
+                        'attributes': props.get('attributes', '{}')
+                    })
+        
+        # Add the new paths to the DataFrame
+        if new_paths:
+            self.df = pd.concat([self.df, pd.DataFrame(new_paths)], ignore_index=True)
+        
+        # Add back the internal subtree structure
+        if not internal_subtree.empty:
+            self.df = pd.concat([self.df, internal_subtree], ignore_index=True)
+        
+        # Remove any duplicates that might have been created
         self.df = self.df.drop_duplicates()
         return self
     

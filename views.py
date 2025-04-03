@@ -256,6 +256,15 @@ class UserView(BaseView):
         self._render_add_user_node()
         self._render_delete_user_node()
         
+        # Download button for user table
+        user_csv = convert_df_to_csv(self.user_table.to_dataframe())
+        st.sidebar.download_button(
+            label="Stiahnuť používateľský closure_table ako CSV",
+            data=user_csv,
+            file_name='user_closure_table.csv',
+            mime='text/csv'
+        )
+        
         # Interactive tree structure
         st.subheader("🌳 Interaktívna stromová štruktúra")
         tree_data = build_tree_data(self.combined_table.to_dataframe())

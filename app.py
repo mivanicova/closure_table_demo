@@ -42,25 +42,51 @@ def main():
     show_raw_tables()
 
 def handle_file_upload():
-    """Handle file upload for admin closure table."""
-    uploaded_file = st.sidebar.file_uploader("Nahraj admin closure_table (CSV)", type="csv")
-    
-    if uploaded_file is not None:
-        file_id = get_file_id(uploaded_file)
+    """Handle file upload for admin and user closure tables."""
+    # Admin file upload
+    with st.sidebar.expander("Admin súbory", expanded=False):
+        uploaded_admin_file = st.file_uploader("Nahraj admin closure_table (CSV)", type="csv", key="admin_uploader")
         
-        if file_id not in st.session_state.processed_file_ids:
-            df = pd.read_csv(uploaded_file)
-            st.session_state.admin_closure_table = ClosureTable(df)
+        if uploaded_admin_file is not None:
+            file_id = get_file_id(uploaded_admin_file)
             
-            # Synchronize user table with the newly uploaded admin table
-            if 'user_closure_table' in st.session_state:
-                st.session_state.user_closure_table = st.session_state.user_closure_table.synchronize_with(
-                    st.session_state.admin_closure_table
-                )
+            if file_id not in st.session_state.processed_file_ids:
+                df = pd.read_csv(uploaded_admin_file)
+                st.session_state.admin_closure_table = ClosureTable(df)
+                
+                # Synchronize user table with the newly uploaded admin table
+                if 'user_closure_table' in st.session_state:
+                    st.session_state.user_closure_table = st.session_state.user_closure_table.synchronize_with(
+                        st.session_state.admin_closure_table
+                    )
+                
+                st.session_state.working_file_id = file_id
+                st.session_state.processed_file_ids = {file_id}
+                st.success("Admin closure_table úspešne nahraný!")
+                st.rerun()
+    
+    # User file upload
+    with st.sidebar.expander("Používateľské súbory", expanded=False):
+        uploaded_user_file = st.file_uploader("Nahraj používateľský closure_table (CSV)", type="csv", key="user_uploader")
+        
+        if uploaded_user_file is not None:
+            file_id = get_file_id(uploaded_user_file)
             
-            st.session_state.working_file_id = file_id
-            st.session_state.processed_file_ids = {file_id}
-            st.rerun()
+            if file_id not in st.session_state.processed_file_ids:
+                df = pd.read_csv(uploaded_user_file)
+                
+                # Create a new ClosureTable from the uploaded file
+                user_table = ClosureTable(df)
+                
+                # Synchronize with the admin table to ensure consistency
+                user_table = user_table.synchronize_with(st.session_state.admin_closure_table)
+                
+                # Update the session state
+                st.session_state.user_closure_table = user_table
+                st.session_state.working_file_id = file_id
+                st.session_state.processed_file_ids = {file_id}
+                st.success("Používateľský closure_table úspešne nahraný!")
+                st.rerun()
 
 def show_raw_tables():
     """Show raw closure tables if requested."""
