@@ -1,5 +1,6 @@
 import pandas as pd
 import streamlit as st
+import json
 
 class ClosureTable:
     """Class for managing a closure table representation of a hierarchical structure."""
@@ -10,17 +11,26 @@ class ClosureTable:
         Args:
             df: Optional DataFrame with closure table data
         """
-        self.df = df if df is not None else pd.DataFrame(
-            columns=['ancestor', 'descendant', 'depth', 'is_descendant_koko', 'is_user_defined']
-        )
+        if df is not None:
+            # Add node_type column if it doesn't exist
+            if 'node_type' not in df.columns:
+                df['node_type'] = None
+            # Add attributes column if it doesn't exist
+            if 'attributes' not in df.columns:
+                df['attributes'] = None
+            self.df = df
+        else:
+            self.df = pd.DataFrame(
+                columns=['ancestor', 'descendant', 'depth', 'is_descendant_koko', 'is_user_defined', 'node_type', 'attributes']
+            )
     
     @classmethod
     def create_default_admin_table(cls):
         """Create a default admin closure table with initial data."""
         return cls(pd.DataFrame([
-            {'ancestor': 'Zem', 'descendant': 'Zem', 'depth': 0, 'is_descendant_koko': True, 'is_user_defined': False},
-            {'ancestor': 'Zem', 'descendant': 'Živé', 'depth': 1, 'is_descendant_koko': True, 'is_user_defined': False},
-            {'ancestor': 'Živé', 'descendant': 'Živé', 'depth': 0, 'is_descendant_koko': True, 'is_user_defined': False},
+            {'ancestor': 'Zem', 'descendant': 'Zem', 'depth': 0, 'is_descendant_koko': True, 'is_user_defined': False, 'node_type': 'Koncept alebo doménová téma', 'attributes': '{}'},
+            {'ancestor': 'Zem', 'descendant': 'Živé', 'depth': 1, 'is_descendant_koko': True, 'is_user_defined': False, 'node_type': 'Koncept alebo doménová téma', 'attributes': '{}'},
+            {'ancestor': 'Živé', 'descendant': 'Živé', 'depth': 0, 'is_descendant_koko': True, 'is_user_defined': False, 'node_type': 'Koncept alebo doménová téma', 'attributes': '{}'},
         ]))
     
     @classmethod
@@ -28,7 +38,7 @@ class ClosureTable:
         """Create an empty user closure table."""
         return cls()
     
-    def add_node(self, parent, new_node, is_descendant_koko=False, is_user_defined=True):
+    def add_node(self, parent, new_node, is_descendant_koko=False, is_user_defined=True, node_type=None, attributes=None):
         """Add a new node to the closure table.
         
         Args:
@@ -36,10 +46,20 @@ class ClosureTable:
             new_node: New node name
             is_descendant_koko: Whether the node is a KoKo descendant
             is_user_defined: Whether the node is user-defined
+            node_type: Type of the node (Osoba, Miesto, Koncept, Digitálny obsah, Iné)
+            attributes: Dictionary of node attributes
             
         Returns:
             ClosureTable: Updated closure table
         """
+        # Convert attributes to JSON string if provided
+        attributes_json = '{}'
+        if attributes:
+            try:
+                attributes_json = json.dumps(attributes, ensure_ascii=False)
+            except Exception as e:
+                st.error(f"Error converting attributes to JSON: {e}")
+        
         new_entries = []
         ancestors = self.df[self.df['descendant'] == parent]
         
@@ -49,7 +69,9 @@ class ClosureTable:
                 'descendant': new_node,
                 'depth': ancestor_row['depth'] + 1,
                 'is_descendant_koko': is_descendant_koko,
-                'is_user_defined': is_user_defined
+                'is_user_defined': is_user_defined,
+                'node_type': node_type,
+                'attributes': attributes_json
             })
         
         new_entries.append({
@@ -57,7 +79,9 @@ class ClosureTable:
             'descendant': new_node,
             'depth': 0,
             'is_descendant_koko': is_descendant_koko,
-            'is_user_defined': is_user_defined
+            'is_user_defined': is_user_defined,
+            'node_type': node_type,
+            'attributes': attributes_json
         })
         
         self.df = pd.concat([self.df, pd.DataFrame(new_entries)], ignore_index=True)
@@ -119,7 +143,8 @@ class ClosureTable:
                     'descendant': sub_row['descendant'],
                     'depth': ancestor_row['depth'] + 1 + sub_row['depth'],
                     'is_descendant_koko': sub_row.get('is_descendant_koko', False),
-                    'is_user_defined': sub_row.get('is_user_defined', False)
+                    'is_user_defined': sub_row.get('is_user_defined', False),
+                    'node_type': sub_row.get('node_type', None)
                 })
 
         new_paths += subtree.to_dict('records')
@@ -133,7 +158,7 @@ class ClosureTable:
         Returns:
             DataFrame: DataFrame with unique nodes and their properties
         """
-        return self.df[['descendant', 'is_descendant_koko']].drop_duplicates()
+        return self.df[['descendant', 'is_descendant_koko', 'node_type', 'attributes']].drop_duplicates()
     
     def get_direct_edges(self):
         """Get all direct edges (parent-child relationships) in the closure table.
@@ -170,6 +195,76 @@ class ClosureTable:
         """
         merged_df = pd.concat([self.df, other_table.df]).drop_duplicates()
         return ClosureTable(merged_df)
+    
+    def synchronize_with(self, admin_table):
+        """Synchronize this user table with changes in the admin table.
+        
+        This method updates the user table to reflect changes in the admin table:
+        - If a node in the admin table is moved, the same node in the user table is moved
+        - If a node in the admin table is deleted, the same node in the user table is deleted
+        - User-defined nodes (is_user_defined=True) are preserved
+        
+        Args:
+            admin_table: The admin ClosureTable to synchronize with
+            
+        Returns:
+            ClosureTable: Updated user table
+        """
+        # Get all nodes in both tables
+        admin_nodes = set(admin_table.get_all_nodes())
+        user_nodes = set(self.get_all_nodes())
+        
+        # Find nodes that exist in both tables
+        common_nodes = admin_nodes.intersection(user_nodes)
+        
+        # Create a new DataFrame for the updated user table
+        new_df = self.df.copy()
+        
+        # Get user-defined nodes
+        user_defined_nodes = set(self.get_user_defined_nodes())
+        
+        # For each common node, update its relationships in the user table
+        # based on its relationships in the admin table
+        for node in common_nodes:
+            # Skip user-defined nodes - we want to preserve these
+            if node in user_defined_nodes:
+                continue
+                
+            # Get all ancestors and descendants of the node in the admin table
+            admin_ancestors = admin_table.df[admin_table.df['descendant'] == node]['ancestor'].tolist()
+            admin_descendants = admin_table.df[admin_table.df['ancestor'] == node]['descendant'].tolist()
+            
+            # Remove all relationships involving this node from the user table
+            # but only if it's not a user-defined node
+            new_df = new_df[~(((new_df['ancestor'] == node) | (new_df['descendant'] == node)) & 
+                             ~new_df['descendant'].isin(user_defined_nodes))]
+            
+            # Add the relationships from the admin table to the user table
+            admin_node_relations = admin_table.df[(admin_table.df['ancestor'] == node) | 
+                                                 (admin_table.df['descendant'] == node)].copy()
+            
+            # Preserve the is_user_defined flag as False for admin-inherited nodes
+            admin_node_relations['is_user_defined'] = False
+            
+            # Filter out any relationships where the descendant is a user-defined node
+            # as we want to preserve the user's relationships for these nodes
+            admin_node_relations = admin_node_relations[~admin_node_relations['descendant'].isin(user_defined_nodes)]
+            
+            new_df = pd.concat([new_df, admin_node_relations], ignore_index=True)
+        
+        # Remove any nodes that exist in the user table but not in the admin table
+        # (they might have been deleted from the admin table)
+        user_only_nodes = user_nodes - admin_nodes
+        for node in user_only_nodes:
+            # Skip user-defined nodes - we want to preserve these
+            if node in user_defined_nodes:
+                continue
+                
+            if not self.df[self.df['descendant'] == node]['is_user_defined'].any():
+                # If this is not a user-defined node, remove it
+                new_df = new_df[~((new_df['ancestor'] == node) | (new_df['descendant'] == node))]
+        
+        return ClosureTable(new_df.drop_duplicates())
     
     def to_dataframe(self):
         """Convert the closure table to a DataFrame.

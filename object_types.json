@@ -1,0 +1,215 @@
+{
+  "PERSON": {
+    "name": "Osoba",
+    "color": "#FF9999",
+    "attributes": [
+      {"name": "Meno a priezvisko", "type": "string", "required": true},
+      {"name": "Titul", "type": "string", "required": false},
+      {"name": "Vzťah k vlastníkovi", "type": "string", "required": false, "description": "rodina, kolega, tréner..."},
+      {"name": "Kontaktné údaje", "type": "object", "required": false, "properties": {
+        "telefón": {"type": "string"},
+        "e-mail": {"type": "string", "format": "email"}
+      }},
+      {"name": "Biometrické údaje", "type": "object", "required": false, "properties": {
+        "výška": {"type": "number"},
+        "hmotnosť": {"type": "number"}
+      }}
+    ]
+  },
+  "ORGANIZATION": {
+    "name": "Organizácia/Skupina",
+    "color": "#99CCFF",
+    "attributes": [
+      {"name": "Úplný názov organizácie", "type": "string", "required": true},
+      {"name": "Právna forma", "type": "string", "required": false},
+      {"name": "Sídlo", "type": "string", "required": false, "description": "adresa"},
+      {"name": "Kontaktné údaje", "type": "object", "required": false, "properties": {
+        "telefón": {"type": "string"},
+        "e-mail": {"type": "string", "format": "email"}
+      }},
+      {"name": "Členovia/zamestnanci", "type": "array", "required": false, "items": {"type": "string"}, "description": "referencie na Osoby"},
+      {"name": "Oddelenia", "type": "array", "required": false, "items": {"type": "string"}, "description": "hierarchia"}
+    ]
+  },
+  "PLACE": {
+    "name": "Miesto",
+    "color": "#99FF99",
+    "attributes": [
+      {"name": "Typ miesta", "type": "string", "required": true, "description": "dom, škola, mesto, les"},
+      {"name": "Adresa miesta", "type": "string", "required": false},
+      {"name": "GPS súradnice", "type": "object", "required": false, "properties": {
+        "latitude": {"type": "number"},
+        "longitude": {"type": "number"}
+      }},
+      {"name": "Rozloha", "type": "number", "required": false},
+      {"name": "Počet miestností", "type": "integer", "required": false},
+      {"name": "Kapacita", "type": "integer", "required": false}
+    ]
+  },
+  "LIVING_PHYSICAL_OBJECT": {
+    "name": "Živý fyzický objekt",
+    "color": "#FFCC99",
+    "attributes": [
+      {"name": "Druh", "type": "string", "required": true, "description": "človekom chované zviera, domáce zviera..."},
+      {"name": "Plemeno", "type": "string", "required": false},
+      {"name": "Meno", "type": "string", "required": false},
+      {"name": "Veterinárne záznamy", "type": "array", "required": false, "items": {"type": "string"}},
+      {"name": "Majiteľ", "type": "string", "required": false, "description": "referencia na Osobu"}
+    ]
+  },
+  "NON_LIVING_PHYSICAL_OBJECT": {
+    "name": "Neživý fyzický objekt",
+    "color": "#FFCC99",
+    "attributes": [
+      {"name": "Typ", "type": "string", "required": true, "description": "pomôcka, nástroj, nábytok, technika, potravina"},
+      {"name": "Výrobca", "type": "string", "required": false},
+      {"name": "Model", "type": "string", "required": false},
+      {"name": "Značka", "type": "string", "required": false},
+      {"name": "Rozmery", "type": "string", "required": false},
+      {"name": "Hmotnosť", "type": "number", "required": false},
+      {"name": "Sériové číslo", "type": "string", "required": false},
+      {"name": "Dátum nákupu", "type": "string", "format": "date", "required": false},
+      {"name": "Záruka", "type": "string", "required": false},
+      {"name": "Umiestnenie", "type": "string", "required": false, "description": "referencia na Miesto"}
+    ]
+  },
+  "DIGITAL_OBJECT": {
+    "name": "Digitálny objekt",
+    "color": "#FFFF99",
+    "attributes": [
+      {"name": "Typ súboru", "type": "string", "required": true, "description": "PDF, DOCX, JPG..."},
+      {"name": "Veľkosť súboru", "type": "number", "required": false},
+      {"name": "Hash", "type": "string", "required": false},
+      {"name": "Link na úložisko", "type": "string", "format": "uri", "required": false},
+      {"name": "Formát metadát", "type": "string", "required": false, "description": "napr. JSON, XML"},
+      {"name": "Verzia súboru", "type": "string", "required": false}
+    ]
+  },
+  "MEASUREMENT": {
+    "name": "Meranie alebo dátový záznam",
+    "color": "#CC99FF",
+    "attributes": [
+      {"name": "Meraná veličina", "type": "string", "required": true, "description": "teplota, tlak..."},
+      {"name": "Hodnota", "type": "number", "required": true},
+      {"name": "Jednotka", "type": "string", "required": true},
+      {"name": "Dátum a čas merania", "type": "string", "format": "date-time", "required": false},
+      {"name": "Zdroj merania", "type": "string", "required": false, "description": "prístroj, aplikácia"},
+      {"name": "Metóda merania", "type": "string", "required": false},
+      {"name": "Presnosť merania", "type": "number", "required": false}
+    ]
+  },
+  "EVENT": {
+    "name": "Udalosť",
+    "color": "#FF99CC",
+    "attributes": [
+      {"name": "Typ udalosti", "type": "string", "required": true, "description": "súťaž, tréning, oslava"},
+      {"name": "Dátum a čas začiatku", "type": "string", "format": "date-time", "required": false},
+      {"name": "Dátum a čas konca", "type": "string", "format": "date-time", "required": false},
+      {"name": "Miesto udalosti", "type": "string", "required": false, "description": "referencia na Miesto"},
+      {"name": "Účastníci", "type": "array", "required": false, "items": {"type": "string"}, "description": "referencie na Osoby"},
+      {"name": "Program", "type": "string", "required": false},
+      {"name": "Popis", "type": "string", "required": false},
+      {"name": "Záznam udalosti", "type": "string", "required": false, "description": "referencia na Digitálny objekt"}
+    ]
+  },
+  "CONCEPT": {
+    "name": "Koncept alebo doménová téma",
+    "color": "#9999FF",
+    "attributes": [
+      {"name": "Definícia témy", "type": "string", "required": true},
+      {"name": "Kľúčové slová", "type": "array", "required": false, "items": {"type": "string"}, "description": "tagy"},
+      {"name": "Súvisiace objekty/dokumenty", "type": "array", "required": false, "items": {"type": "string"}, "description": "referencie"}
+    ]
+  },
+  "PROCESS": {
+    "name": "Proces alebo aktivita",
+    "color": "#99FFFF",
+    "attributes": [
+      {"name": "Popis procesu/aktivity", "type": "string", "required": true},
+      {"name": "Začiatok procesu", "type": "string", "format": "date-time", "required": false},
+      {"name": "Koniec procesu", "type": "string", "format": "date-time", "required": false},
+      {"name": "Jednotlivé kroky procesu", "type": "array", "required": false, "items": {"type": "string"}},
+      {"name": "Zodpovedná osoba alebo organizácia", "type": "string", "required": false},
+      {"name": "Výsledok procesu", "type": "array", "required": false, "items": {"type": "string"}, "description": "referencie"}
+    ]
+  },
+  "RELATIONSHIP": {
+    "name": "Vzťah",
+    "color": "#FF99FF",
+    "attributes": [
+      {"name": "Typ", "type": "string", "required": true},
+      {"name": "Účastníci", "type": "array", "required": true, "items": {"type": "string"}},
+      {"name": "Intenzita", "type": "string", "required": false},
+      {"name": "Trvanie", "type": "string", "required": false},
+      {"name": "História", "type": "string", "required": false},
+      {"name": "Vzťahová rola účastníkov", "type": "object", "required": false}
+    ]
+  },
+  "SUBJECTIVE_STATE": {
+    "name": "Subjektívny stav",
+    "color": "#FFCCCC",
+    "attributes": [
+      {"name": "Typ subjektívneho stavu", "type": "string", "required": true, "description": "emócia, pocit, nálada, telesný vnem"},
+      {"name": "Intenzita", "type": "string", "required": false, "description": "číselná škála alebo popis intenzity: slabá, stredná, silná"},
+      {"name": "Začiatok a trvanie stavu", "type": "string", "required": false, "description": "časový interval"},
+      {"name": "Vzťah k osobe", "type": "string", "required": false, "description": "referencia na objekt typu Osoba"},
+      {"name": "Spúšťač alebo kontext vzniku", "type": "string", "required": false, "description": "referencia na Udalosť, Miesto, Proces, Mentálny obsah"},
+      {"name": "Metóda detekcie", "type": "string", "required": false, "description": "pozorovanie, sebavýpoveď, meranie cez prístroj/aplikáciu"}
+    ]
+  },
+  "MENTAL_CONTENT": {
+    "name": "Mentálny obsah",
+    "color": "#CCFFFF",
+    "attributes": [
+      {"name": "Typ obsahu", "type": "string", "required": true, "description": "sen, predstava, vízia, fantázia, spomienka, myšlienka"},
+      {"name": "Obsahový popis", "type": "string", "required": false, "description": "textový opis, audio, video – ak existuje"},
+      {"name": "Vznik alebo časové obdobie prežívania", "type": "string", "required": false, "description": "dátum, čas alebo interval"},
+      {"name": "Autor alebo prežívajúci subjekt", "type": "string", "required": false, "description": "referencia na Osobu"},
+      {"name": "Emocionálny kontext", "type": "string", "required": false, "description": "referencia na Subjektívny stav"},
+      {"name": "Súvisiace objekty", "type": "array", "required": false, "items": {"type": "string"}, "description": "referencie na Udalosť, Miesto, Fiktívnu entitu"}
+    ]
+  },
+  "FICTIONAL_ENTITY": {
+    "name": "Fiktívna entita",
+    "color": "#CCCCFF",
+    "attributes": [
+      {"name": "Typ fiktívnej entity", "type": "string", "required": true, "description": "literárna postava, rozprávková bytosť, mýtická bytosť, vymyslené miesto, predmet"},
+      {"name": "Meno/názov entity", "type": "string", "required": true},
+      {"name": "Zdroj pôvodu", "type": "string", "required": false, "description": "názov knihy, filmu, rozprávky, hry, legendy"},
+      {"name": "Charakteristika a vlastnosti", "type": "string", "required": false, "description": "textový popis osobnosti, schopností, vlastností"},
+      {"name": "Autor alebo pôvodca entity", "type": "string", "required": false, "description": "referencia na Osobu, Organizáciu alebo zdroj"},
+      {"name": "Vzťahy s inými entitami", "type": "array", "required": false, "items": {"type": "string"}, "description": "referencia na iné Fiktívne entity, Osoby, Miesta"}
+    ]
+  },
+  "SYMBOL": {
+    "name": "Symbol alebo znak",
+    "color": "#FFFFCC",
+    "attributes": [
+      {"name": "Význam symbolu", "type": "string", "required": true, "description": "textová definícia významu"},
+      {"name": "Typ symbolu", "type": "string", "required": true, "description": "dopravná značka, emotikon, heraldický symbol, piktogram"},
+      {"name": "Grafické znázornenie", "type": "string", "required": false, "description": "digitálny súbor – referencia na Digitálny objekt"},
+      {"name": "Kontext použitia", "type": "string", "required": false, "description": "situácia, pravidlá použitia symbolu, legislatíva"},
+      {"name": "Autor symbolu", "type": "string", "required": false, "description": "referencia na Osobu, Organizáciu"},
+      {"name": "Súvisiace koncepty alebo objekty", "type": "array", "required": false, "items": {"type": "string"}, "description": "referencia na Koncept, Miesto, Udalosť, Proces"}
+    ]
+  },
+  "ABSTRACT_VALUE": {
+    "name": "Abstraktná hodnota alebo vlastnosť",
+    "color": "#CCFFCC",
+    "attributes": [
+      {"name": "Typ hodnoty alebo vlastnosti", "type": "string", "required": true, "description": "morálna hodnota, etický princíp, filozofická vlastnosť"},
+      {"name": "Definícia hodnoty", "type": "string", "required": true, "description": "presná textová definícia alebo vysvetlenie"},
+      {"name": "Oblasť použitia alebo doména", "type": "string", "required": false, "description": "etika, filozofia, právo, pedagogika, spoločnosť"},
+      {"name": "Historický alebo kultúrny kontext", "type": "string", "required": false, "description": "ako vznikla, význam v kultúre"},
+      {"name": "Súvisiace koncepty alebo hodnoty", "type": "array", "required": false, "items": {"type": "string"}, "description": "referencie na Koncept alebo iné Abstraktné hodnoty"},
+      {"name": "Príklady uplatnenia alebo porušenia", "type": "array", "required": false, "items": {"type": "string"}, "description": "referencia na Udalosť, Proces, Osobu"}
+    ]
+  },
+  "OTHER": {
+    "name": "Iné",
+    "color": "#CCCCCC",
+    "attributes": [
+      {"name": "Popis", "type": "string", "required": true}
+    ]
+  }
+}

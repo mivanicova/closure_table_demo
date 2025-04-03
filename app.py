@@ -51,6 +51,13 @@ def handle_file_upload():
         if file_id not in st.session_state.processed_file_ids:
             df = pd.read_csv(uploaded_file)
             st.session_state.admin_closure_table = ClosureTable(df)
+            
+            # Synchronize user table with the newly uploaded admin table
+            if 'user_closure_table' in st.session_state:
+                st.session_state.user_closure_table = st.session_state.user_closure_table.synchronize_with(
+                    st.session_state.admin_closure_table
+                )
+            
             st.session_state.working_file_id = file_id
             st.session_state.processed_file_ids = {file_id}
             st.rerun()

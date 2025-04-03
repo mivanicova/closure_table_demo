@@ -1,9 +1,14 @@
 import streamlit as st
+import json
 from streamlit_agraph import agraph, Node, Edge, Config
 from streamlit_tree_select import tree_select
 
 from models import ClosureTable
-from utils import convert_df_to_csv, compute_completion_score, build_tree_data
+from utils import (
+    convert_df_to_csv, compute_completion_score, build_tree_data,
+    load_object_types, get_object_type_names, get_object_type_by_name,
+    get_object_type_color, get_object_type_attributes
+)
 
 class BaseView:
     """Base class for views with common functionality."""
@@ -16,14 +21,56 @@ class BaseView:
             closure_table: ClosureTable instance
         """
         unique_nodes = closure_table.get_unique_nodes()
-        nodes = [
-            Node(
-                id=row['descendant'], 
-                label=row['descendant'], 
-                color="red" if row['is_descendant_koko'] else "#97C2FC"
-            ) 
-            for _, row in unique_nodes.iterrows()
-        ]
+        
+        # Check if the required columns exist in the DataFrame
+        df = closure_table.to_dataframe()
+        has_user_defined = 'is_user_defined' in df.columns
+        has_node_type = 'node_type' in df.columns
+        has_attributes = 'attributes' in df.columns
+        
+        nodes = []
+        for _, row in unique_nodes.iterrows():
+            # Determine node color based on type and whether it's a KoKo descendant
+            if row['is_descendant_koko']:
+                color = "red"  # KoKo nodes are always red
+            else:
+                # Use type-based color for user nodes if node_type exists
+                if has_node_type and row.get('node_type'):
+                    color = get_object_type_color(row['node_type'])
+                else:
+                    color = "#97C2FC"  # Default color
+            
+            # Add border for user-defined nodes if is_user_defined exists
+            border = 3 if (has_user_defined and row.get('is_user_defined', False)) else 1
+            
+            # Create node with title showing the type and attributes
+            if has_user_defined:
+                status = 'Používateľom definovaný' if row.get('is_user_defined', False) else 'Systémový'
+            else:
+                status = 'Neurčený'
+                
+            node_type = row.get('node_type', 'Neurčený') if has_node_type else 'Neurčený'
+            title = f"Status: {status}\nTyp: {node_type}"
+            
+            # Add attributes to title if available
+            if has_attributes and row.get('attributes') and row.get('attributes') != '{}':
+                try:
+                    attributes = json.loads(row['attributes'])
+                    for attr_name, attr_value in attributes.items():
+                        if attr_value:  # Only show non-empty attributes
+                            title += f"\n{attr_name}: {attr_value}"
+                except:
+                    pass
+            
+            nodes.append(
+                Node(
+                    id=row['descendant'], 
+                    label=row['descendant'], 
+                    color=color,
+                    title=title,
+                    borderWidth=border  # Add border width to visually mark user-defined nodes
+                )
+            )
         
         direct_edges = closure_table.get_direct_edges()
         edges = [
@@ -85,15 +132,60 @@ class AdminView(BaseView):
         )
         new_node_name = st.sidebar.text_input("Meno nového uzla:")
         
+        # Add node type selection for admin nodes using dynamic types from JSON
+        node_types = get_object_type_names()
+        selected_node_type = st.sidebar.selectbox("Typ uzla:", node_types)
+        
+        # Get attributes for the selected node type
+        attributes = {}
+        if selected_node_type:
+            with st.sidebar.expander("Atribúty", expanded=False):
+                attr_defs = get_object_type_attributes(selected_node_type)
+                for attr_def in attr_defs:
+                    if attr_def['type'] == 'string':
+                        attributes[attr_def['name']] = st.text_input(
+                            f"{attr_def['name']}{' *' if attr_def.get('required', False) else ''}",
+                            help=attr_def.get('description', ''),
+                            key=f"admin_{attr_def['name']}"
+                        )
+                    elif attr_def['type'] == 'number':
+                        attributes[attr_def['name']] = st.number_input(
+                            f"{attr_def['name']}{' *' if attr_def.get('required', False) else ''}",
+                            help=attr_def.get('description', ''),
+                            step=0.1,
+                            key=f"admin_{attr_def['name']}"
+                        )
+                    elif attr_def['type'] == 'integer':
+                        attributes[attr_def['name']] = st.number_input(
+                            f"{attr_def['name']}{' *' if attr_def.get('required', False) else ''}",
+                            help=attr_def.get('description', ''),
+                            step=1,
+                            key=f"admin_{attr_def['name']}"
+                        )
+                    elif attr_def['type'] == 'boolean':
+                        attributes[attr_def['name']] = st.checkbox(
+                            f"{attr_def['name']}{' *' if attr_def.get('required', False) else ''}",
+                            help=attr_def.get('description', ''),
+                            key=f"admin_{attr_def['name']}"
+                        )
+        
         if st.sidebar.button("Pridaj nový uzol"):
             if new_node_name.strip():
+                # Add node to admin table
                 self.admin_table.add_node(
                     selected_parent,
                     new_node_name.strip(),
                     is_descendant_koko=True,
-                    is_user_defined=False
+                    is_user_defined=False,
+                    node_type=selected_node_type,
+                    attributes=attributes
                 )
-                st.sidebar.success(f"Uzol '{new_node_name}' pridaný pod '{selected_parent}'!")
+                
+                # Synchronize user table with admin table
+                if 'user_closure_table' in st.session_state:
+                    st.session_state.user_closure_table = st.session_state.user_closure_table.synchronize_with(self.admin_table)
+                
+                st.sidebar.success(f"Uzol '{new_node_name}' typu '{selected_node_type}' pridaný pod '{selected_parent}'!")
                 st.rerun()
             else:
                 st.sidebar.error("Zadaj názov nového uzla!")
@@ -106,7 +198,13 @@ class AdminView(BaseView):
         )
         
         if st.sidebar.button("Zmaž uzol"):
+            # Delete node from admin table
             self.admin_table.delete_node(node_to_delete)
+            
+            # Synchronize user table with admin table
+            if 'user_closure_table' in st.session_state:
+                st.session_state.user_closure_table = st.session_state.user_closure_table.synchronize_with(self.admin_table)
+            
             st.sidebar.success(f"Uzol '{node_to_delete}' a jeho potomkovia boli zmazaní!")
             st.rerun()
     
@@ -123,7 +221,13 @@ class AdminView(BaseView):
         
         if st.sidebar.button("Presuň uzol"):
             try:
+                # Move node in admin table
                 self.admin_table.move_node(node_to_move, new_parent)
+                
+                # Synchronize user table with admin table
+                if 'user_closure_table' in st.session_state:
+                    st.session_state.user_closure_table = st.session_state.user_closure_table.synchronize_with(self.admin_table)
+                
                 st.sidebar.success(f"Uzol '{node_to_move}' bol presunutý pod '{new_parent}'!")
                 st.rerun()
             except ValueError as e:
@@ -157,8 +261,45 @@ class UserView(BaseView):
         tree_data = build_tree_data(self.combined_table.to_dataframe())
         selected = tree_select(tree_data)
         
-        if selected:
-            st.success(f"Vybraný uzol: {selected}")
+        # Display node details when selected
+        if selected and selected.get('value'):
+            selected_node = selected['value']
+            node_info = self.combined_table.df[self.combined_table.df['descendant'] == selected_node].iloc[0]
+            
+            # Check if the required columns exist in the DataFrame
+            df = self.combined_table.to_dataframe()
+            has_user_defined = 'is_user_defined' in df.columns
+            has_node_type = 'node_type' in df.columns
+            has_attributes = 'attributes' in df.columns
+            
+            with st.expander(f"Detaily uzla: {selected_node}", expanded=True):
+                # Display user_defined status with colored indicator
+                if has_user_defined:
+                    if node_info.get('is_user_defined', False):
+                        st.markdown("**Status:** 🟢 Používateľom definovaný")
+                    else:
+                        st.markdown("**Status:** 🔴 Systémový")
+                else:
+                    st.markdown("**Status:** ⚪ Neurčený")
+                
+                # Display node type
+                if has_node_type:
+                    st.markdown(f"**Typ uzla:** {node_info.get('node_type', 'Neurčený') or 'Neurčený'}")
+                else:
+                    st.markdown("**Typ uzla:** Neurčený")
+                
+                # Display attributes if available
+                if has_attributes and node_info.get('attributes') and node_info.get('attributes') != '{}':
+                    st.markdown("**Atribúty:**")
+                    try:
+                        attributes = json.loads(node_info['attributes'])
+                        for attr_name, attr_value in attributes.items():
+                            if attr_value:  # Only show non-empty attributes
+                                st.markdown(f"- **{attr_name}:** {attr_value}")
+                    except:
+                        st.error("Chyba pri načítaní atribútov")
+                else:
+                    st.info("Žiadne atribúty")
         
         # Visualization
         st.header("Vizualizácia dátovej mapy (používateľ)")
@@ -178,6 +319,39 @@ class UserView(BaseView):
             selected_parent = st.sidebar.selectbox("Vyber rodiča:", valid_parents)
             new_node_name = st.sidebar.text_input("Názov môjho uzla:")
             
+            # Add node type selection using dynamic types from JSON
+            node_types = get_object_type_names()
+            selected_node_type = st.sidebar.selectbox("Typ uzla:", node_types)
+            
+            # Get attributes for the selected node type
+            attributes = {}
+            if selected_node_type:
+                with st.sidebar.expander("Atribúty", expanded=False):
+                    attr_defs = get_object_type_attributes(selected_node_type)
+                    for attr_def in attr_defs:
+                        if attr_def['type'] == 'string':
+                            attributes[attr_def['name']] = st.text_input(
+                                f"{attr_def['name']}{' *' if attr_def.get('required', False) else ''}",
+                                help=attr_def.get('description', '')
+                            )
+                        elif attr_def['type'] == 'number':
+                            attributes[attr_def['name']] = st.number_input(
+                                f"{attr_def['name']}{' *' if attr_def.get('required', False) else ''}",
+                                help=attr_def.get('description', ''),
+                                step=0.1
+                            )
+                        elif attr_def['type'] == 'integer':
+                            attributes[attr_def['name']] = st.number_input(
+                                f"{attr_def['name']}{' *' if attr_def.get('required', False) else ''}",
+                                help=attr_def.get('description', ''),
+                                step=1
+                            )
+                        elif attr_def['type'] == 'boolean':
+                            attributes[attr_def['name']] = st.checkbox(
+                                f"{attr_def['name']}{' *' if attr_def.get('required', False) else ''}",
+                                help=attr_def.get('description', '')
+                            )
+            
             if st.sidebar.button("Pridať môj uzol"):
                 if new_node_name.strip():
                     merged_table = self.admin_table.merge(self.user_table)
@@ -185,14 +359,16 @@ class UserView(BaseView):
                         selected_parent,
                         new_node_name.strip(),
                         is_descendant_koko=False,
-                        is_user_defined=True
+                        is_user_defined=True,
+                        node_type=selected_node_type,
+                        attributes=attributes
                     )
                     
                     # Update both the instance variable and the session state
                     self.user_table = ClosureTable(updated_table.to_dataframe())
                     st.session_state.user_closure_table = self.user_table
                     
-                    st.sidebar.success(f"Tvoj uzol '{new_node_name}' bol pridaný pod '{selected_parent}'!")
+                    st.sidebar.success(f"Tvoj uzol '{new_node_name}' typu '{selected_node_type}' bol pridaný pod '{selected_parent}'!")
                     st.rerun()
                 else:
                     st.sidebar.error("Zadaj názov svojho uzla!")
