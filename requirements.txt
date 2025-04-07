@@ -2,3 +2,5 @@ pandas
 streamlit
 streamlit-agraph
 streamlit-tree-select
+openai>=1.0.0
+python-dotenv

@@ -1,9 +1,11 @@
 import streamlit as st
 import json
+import uuid
 from streamlit_agraph import agraph, Node, Edge, Config
 from streamlit_tree_select import tree_select
 
 from models import ClosureTable
+from text_interface import TextInterface
 from utils import (
     convert_df_to_csv, compute_completion_score, build_tree_data,
     load_object_types, get_object_type_names, get_object_type_by_name,
@@ -99,11 +101,12 @@ class AdminView(BaseView):
             admin_table: ClosureTable instance for admin data
         """
         self.admin_table = admin_table
+        self.text_interface = TextInterface(admin_table)
     
     def render(self):
         """Render the administrator view."""
         st.sidebar.header("Správa stromu")
-        action = st.sidebar.selectbox("Akcia:", ["Pridať nový uzol", "Zmazať uzol", "Presunúť uzol"])
+        action = st.sidebar.selectbox("Akcia:", ["Pridať nový uzol", "Zmazať uzol", "Presunúť uzol", "Textové rozhranie"])
         
         if action == "Pridať nový uzol":
             self._render_add_node()
@@ -111,6 +114,8 @@ class AdminView(BaseView):
             self._render_delete_node()
         elif action == "Presunúť uzol":
             self._render_move_node()
+        elif action == "Textové rozhranie":
+            self._render_text_interface()
         
         st.header("Vizualizácia dátovej mapy (admin)")
         self.render_graph(self.admin_table)
@@ -123,6 +128,10 @@ class AdminView(BaseView):
             file_name='admin_closure_table.csv',
             mime='text/csv'
         )
+    
+    def _render_text_interface(self):
+        """Render the text interface for natural language interaction."""
+        self.text_interface.render()
     
     def _render_add_node(self):
         """Render the UI for adding a new node."""
@@ -171,6 +180,9 @@ class AdminView(BaseView):
         
         if st.sidebar.button("Pridaj nový uzol"):
             if new_node_name.strip():
+                # Add UUID to attributes
+                attributes['uuid'] = str(uuid.uuid4())
+                
                 # Add node to admin table
                 self.admin_table.add_node(
                     selected_parent,
@@ -363,6 +375,9 @@ class UserView(BaseView):
             
             if st.sidebar.button("Pridať môj uzol"):
                 if new_node_name.strip():
+                    # Add UUID to attributes
+                    attributes['uuid'] = str(uuid.uuid4())
+                    
                     merged_table = self.admin_table.merge(self.user_table)
                     updated_table = merged_table.add_node(
                         selected_parent,

@@ -1,8 +1,13 @@
+# Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
+
 import streamlit as st
 import pandas as pd
 
 from models import ClosureTable
 from views import AdminView, UserView
+from text_interface import TextInterface
 from utils import get_file_id
 
 def main():
